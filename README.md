@@ -6,7 +6,7 @@
 
 **Doctor Tracker** gives hospital administrators one place to run their doctor roster and patient caseload. Signed-in staff can register doctors, open any doctor to see and manage their patients, and work through thousands of patient records with instant search, date and condition filters, and pagination. A live analytics dashboard turns the data into decisions: admission trends, critical-case volume, patients per doctor, specialization load and demographics. The app is a **Next.js** client talking to a standalone **Express + MongoDB** REST API. Every list query is served by a purpose-built index, so it stays fast as the data grows.
 
-![Dashboard](docs/screenshots/dashboard-desktop.png)
+![Dashboard](client/docs/screenshots/dashboard-desktop.png)
 
 ## Live demo
 
@@ -418,7 +418,7 @@ All routes are prefixed with `/api`. Everything except `/auth/login`, `/auth/log
 doctor-tracker/
 ├── docker-compose.yml           # MongoDB 7
 ├── package.json                 # convenience scripts for both apps
-├── docs/screenshots/
+├── client/docs/screenshots/
 ├── server/                      # Express REST API
 │   ├── .env.example
 │   └── src/
@@ -465,23 +465,23 @@ doctor-tracker/
 
 | Dashboard (light) | Dashboard (dark) |
 | --- | --- |
-| ![Dashboard](docs/screenshots/dashboard-desktop.png) | ![Dashboard dark](docs/screenshots/dashboard-dark.png) |
+| ![Dashboard](client/docs/screenshots/dashboard-desktop.png) | ![Dashboard dark](client/docs/screenshots/dashboard-dark.png) |
 
 | Doctors (search + filters) | Doctor detail & patients |
 | --- | --- |
-| ![Doctors](docs/screenshots/doctors-desktop.png) | ![Doctor detail](docs/screenshots/doctor-detail-desktop.png) |
+| ![Doctors](client/docs/screenshots/doctors-desktop.png) | ![Doctor detail](client/docs/screenshots/doctor-detail-desktop.png) |
 
 | Patients | Add patient |
 | --- | --- |
-| ![Patients](docs/screenshots/patients-desktop.png) | ![Add patient](docs/screenshots/add-patient-modal.png) |
+| ![Patients](client/docs/screenshots/patients-desktop.png) | ![Add patient](client/docs/screenshots/add-patient-modal.png) |
 
-![Login](docs/screenshots/login-desktop.png)
+![Login](client/docs/screenshots/login-desktop.png)
 
 ### Mobile
 
 | Login | Dashboard | Doctors | Patients | Navigation |
 | --- | --- | --- | --- | --- |
-| ![](docs/screenshots/login-mobile.png) | ![](docs/screenshots/dashboard-mobile.png) | ![](docs/screenshots/doctors-mobile.png) | ![](docs/screenshots/patients-mobile.png) | ![](docs/screenshots/menu-mobile.png) |
+| ![](client/docs/screenshots/login-mobile.png) | ![](client/docs/screenshots/dashboard-mobile.png) | ![](client/docs/screenshots/doctors-mobile.png) | ![](client/docs/screenshots/patients-mobile.png) | ![](client/docs/screenshots/menu-mobile.png) |
 
 ---
 
