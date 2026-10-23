@@ -87,6 +87,22 @@ npm run seed                  # demo data + indexes
 npm run dev                   # API :4000 and website :3000 together
 ```
 
+### Running it again later (after a restart)
+
+Setup is a one-time job. Next time, for example after restarting your computer, you only need two steps. The **live website** needs nothing: it keeps running on Vercel and Render while your computer is off.
+
+1. **Start Docker Desktop** and wait until it shows **Engine running**. The MongoDB container starts by itself with Docker (`restart: unless-stopped`), and your data is kept.
+2. **Start the app** in the project folder (in VS Code: **Terminal → New Terminal**):
+
+   | Setup you used | Run |
+   | --- | --- |
+   | Option A: two repositories | `npm run dev` in `doctor-tracker-backend`, then `npm run dev` in `doctor-tracker-frontend` (two terminals) |
+   | Option B: this workspace | `npm run dev` (starts both) |
+
+Wait for `API listening on http://localhost:4000` and `Ready`, then open **http://localhost:3000**. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop.
+
+> If MongoDB doesn't start with Docker, run `docker compose up -d` in the backend (or `npm run db:up` in this workspace) once. To get fresh demo data, run `npm run seed`. Production mode instead of development: `npm run build`, then `npm start`.
+
 ### Useful commands
 
 | Command | Where | What it does |
