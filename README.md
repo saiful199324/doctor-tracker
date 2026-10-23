@@ -12,14 +12,14 @@
 
 | | |
 | --- | --- |
-| **App** | **https://sandfly-machine-neil.ngrok-free.dev** |
+| **App** | **https://doctor-tracker-m0ts.onrender.com** |
 | **Admin** (full access) | `admin@doctortracker.dev` / `Admin@12345` |
 | **Staff** (no deletes) | `staff@doctortracker.dev` / `Staff@12345` |
 | **Source** | https://github.com/saiful199324/doctor-tracker |
 
-> On the first visit, ngrok's free plan shows a one-time "You are about to visit…" notice. Click **Visit Site** to continue. The login page also has a **Fill demo credentials** button.
+> The login page has a **Fill demo credentials** button. Data is shared demo data, so feel free to add, edit and delete.
 >
-> The demo runs the production build through an [ngrok](https://ngrok.com) HTTPS tunnel, started with `npm run live` (see [Run the live demo](#run-the-live-demo)). Data is shared demo data: feel free to add, edit and delete. `npm run seed` restores it.
+> Hosted on Render's free plan with MongoDB Atlas (see [Deployment](#deployment)). A GitHub Actions job keeps it awake from 08:00 to 23:00 Bangladesh time. Outside those hours the first visit can take up to a minute while the service wakes up.
 
 ---
 
@@ -130,15 +130,29 @@ Open **http://localhost:3000** and sign in.
 
 Production build: `npm run build && npm start`.
 
-### Run the live demo
+### Deployment
+
+The live demo runs on **Render** (free web service, Singapore) with **MongoDB Atlas** (free M0 cluster, AWS Singapore). It's defined in [`render.yaml`](render.yaml) and redeploys automatically on every push to `main`.
+
+```
+Browser ──HTTPS──▶ Cloudflare ──▶ Render service
+                                   ├─ Next.js client   :$PORT (public)
+                                   │      └─ /api/* ──▶ Express API :4000 (internal only) ──▶ MongoDB Atlas
+```
+
+- **One service runs both apps.** Next.js listens on Render's public port and proxies `/api/*` to the Express API on `127.0.0.1:4000`, so the API isn't reachable from the internet at all. The code is still two separate apps. Sharing one free service keeps the workspace within Render's 750 free instance hours per month.
+- **Configuration** is set as Render environment variables: `NODE_ENV=production`, `MONGODB_URI`, `JWT_SECRET` (one secret shared by both apps), `API_URL`, `TRUST_PROXY` and `CLIENT_IP_HEADER`.
+- **Real visitor IPs.** Render sits behind Cloudflare, so `CLIENT_IP_HEADER=cf-connecting-ip` gives the login rate limiter and the request logs each visitor's real address rather than a proxy node's. This was verified in the production logs.
+- **Database.** A dedicated user with `readWrite` on the `doctor_tracker` database only. The data was loaded with `npm run seed`, and indexes are managed with `npm run db:indexes`.
+- **Keep-awake.** [`.github/workflows/keep-api-warm.yml`](.github/workflows/keep-api-warm.yml) pings `/api/health` every 10 minutes during daytime hours (the URL is set in the repository variable `API_HEALTH_URL`). It doesn't run around the clock, because free hours are shared with other services in the workspace.
+
+### Run a live demo from your own machine
 
 ```bash
 npm run live             # MongoDB up → production build → API + web + ngrok tunnel
 ```
 
-This needs Docker running and [ngrok](https://ngrok.com/download) installed with an authtoken (`ngrok config add-authtoken <token>`). The free plan gives each account one permanent `*.ngrok-free.dev` address, which ngrok uses automatically. The API runs with `NODE_ENV=production`, so session cookies are `Secure` and errors never include stack traces. Visitors' real IPs reach the login rate limiter through the proxy chain. Stop everything with <kbd>Ctrl</kbd>+<kbd>C</kbd>.
-
-For an always-on deployment without this machine: MongoDB Atlas for the database, Render or Railway for `server/` (`npm run build && npm start`), and Vercel for `client/`. Set `API_URL` to the API's URL, and use the same `JWT_SECRET` in both.
+This needs Docker running and [ngrok](https://ngrok.com/download) installed with an authtoken (`ngrok config add-authtoken <token>`). The free plan gives each account one permanent `*.ngrok-free.dev` address, which ngrok uses automatically. On the first visit, ngrok shows a one-time notice; click **Visit Site** to continue. Stop everything with <kbd>Ctrl</kbd>+<kbd>C</kbd>.
 
 > **Windows note:** port 5000 is often reserved by Hyper-V, which is why the API defaults to 4000. If a port is taken, the server says so and exits.
 
