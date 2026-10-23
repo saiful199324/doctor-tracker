@@ -14,7 +14,8 @@
     "typecheck": "npm --prefix server run typecheck && npm --prefix client run typecheck",
     "lint": "npm --prefix client run lint",
     "live": "npm run db:up && npm run build && npm run live:start",
-    "live:start": "concurrently -k -n api,web,tunnel -c blue,magenta,green \"cross-env NODE_ENV=production npm --prefix server start\" \"npm --prefix client start\" \"ngrok http 3000 --log=stdout --log-level=warn\""
+    "live:start": "concurrently -k -n api,web,tunnel -c blue,magenta,green \"cross-env NODE_ENV=production npm --prefix server start\" \"npm --prefix client start\" \"ngrok http 3000 --log=stdout --log-level=warn\"",
+    "start:render": "concurrently -k -n api,web \"cross-env PORT=4000 node server/dist/index.js\" \"npm --prefix client start -- -p $PORT -H 0.0.0.0\""
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

@@ -1,14 +1,21 @@
-# Render Blueprint for the Express API (server/). The Next.js client is deployed to Vercel.
+# Render Blueprint: one free web service runs both apps side by side.
+#   - Next.js client listens on Render's public $PORT
+#   - Express API listens on internal port 4000 (not publicly reachable);
+#     Next.js proxies /api/* to it, exactly like the local setup
+# One service instead of two keeps the demo inside the free plan's monthly hours.
 services:
   - type: web
-    name: doctor-tracker-api
+    name: doctor-tracker
     runtime: node
     plan: free
     region: singapore
-    rootDir: server
-    # --include=dev: TypeScript is a devDependency, and NODE_ENV=production would otherwise skip it
-    buildCommand: npm ci --include=dev && npm run build
-    startCommand: npm start
+    # --include=dev: TypeScript and the build tools are devDependencies, and NODE_ENV=production would skip them
+    buildCommand: >-
+      npm ci --include=dev &&
+      npm --prefix server ci --include=dev &&
+      npm --prefix client ci --include=dev &&
+      npm run build
+    startCommand: npm run start:render
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
@@ -16,14 +23,14 @@ services:
         value: production
       - key: NODE_VERSION
         value: "20"
+      - key: API_URL
+        value: http://127.0.0.1:4000
       - key: TRUST_PROXY
-        value: "2" # Vercel rewrite + Render load balancer
+        value: "1" # Render's load balancer; Next.js passes the visitor IP through
       - key: JWT_EXPIRES_IN
         value: 1d
       # Set in the dashboard (or by the deploy script); never committed:
       - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET
-        sync: false
-      - key: CLIENT_ORIGIN
         sync: false
