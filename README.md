@@ -8,39 +8,125 @@
 
 ![Dashboard](client/docs/screenshots/dashboard-desktop.png)
 
-## Live demo
+## Live links
 
-| | |
+| What | Link |
 | --- | --- |
-| | |
-| --- | --- |
-| **Live frontend website** | **https://doctor-tracker-frontend-two.vercel.app** (Vercel) |
-| **Live backend API** | **https://doctor-tracker-api-4x90.onrender.com** (Render) · [`/api/health`](https://doctor-tracker-api-4x90.onrender.com/api/health) |
-| **Frontend repository** | https://github.com/saiful199324/doctor-tracker-frontend |
-| **Backend repository** | https://github.com/saiful199324/doctor-tracker-backend |
-| **Admin** (full access) | `admin@doctortracker.dev` / `Admin@12345` |
-| **Staff** (no deletes) | `staff@doctortracker.dev` / `Staff@12345` |
+| 🌐 **Live website** (frontend, Vercel) | **https://doctor-tracker-frontend-two.vercel.app** |
+| ⚙️ **Live API** (backend, Render) | **https://doctor-tracker-api-4x90.onrender.com** · health check: [`/api/health`](https://doctor-tracker-api-4x90.onrender.com/api/health) |
+| 📦 **Frontend repository** | https://github.com/saiful199324/doctor-tracker-frontend |
+| 📦 **Backend repository** | https://github.com/saiful199324/doctor-tracker-backend |
+| 🗂️ **This repository** | Combined development workspace (`client/` + `server/`) |
 
-> This repository is the combined development workspace (`client/` + `server/`). The frontend and backend are also published as the two standalone repositories above, each with its own README, setup guide and `.env.example`.
->
-> The login page has a **Fill demo credentials** button. Data is shared demo data, so feel free to add, edit and delete. The API runs on Render's free plan; outside 08:00–23:00 Bangladesh time, the first request can take up to a minute while it wakes up.
+**Demo accounts**
+
+| Role | Email | Password | Can do |
+| --- | --- | --- | --- |
+| Admin | `admin@doctortracker.dev` | `Admin@12345` | Everything, including deletes |
+| Staff | `staff@doctortracker.dev` | `Staff@12345` | View, create and edit; no deletes |
+
+---
+
+## Try the live app
+
+1. Open **https://doctor-tracker-frontend-two.vercel.app**. You'll be taken to the sign-in page.
+2. Click **Fill demo credentials**, then **Sign in**.
+3. Things to try:
+   - **Dashboard:** switch **7D / 30D / 90D / 12M**, and click a bar in "Patients per doctor" to open that doctor.
+   - **Doctors:** search (`card`), open **Filters** (specialization, hospital, joined date), **Add doctor**, and use the pages.
+   - **A doctor's page:** **Add patient** under that doctor, edit a patient, remove one.
+   - **Patients:** condition chips, search, filters (doctor, gender, age group, admission dates), edit and delete.
+   - Sign in as **staff** to check that delete buttons are hidden. Toggle 🌙 dark mode, or shrink the window to see the mobile layout.
+
+> ⏱️ The API runs on Render's free plan. Outside 08:00–23:00 Bangladesh time it may be asleep, so the **first sign-in can take up to a minute** while it wakes up. After that it's fast. All data is shared demo data, so feel free to add, edit and delete.
+
+---
+
+## Run locally
+
+You need **[Node.js 20+](https://nodejs.org)** and **MongoDB**: either **[Docker Desktop](https://www.docker.com/products/docker-desktop/)**, which the steps use, or a free [MongoDB Atlas](https://www.mongodb.com/atlas) connection string. The commands work in PowerShell, Git Bash, macOS and Linux terminals.
+
+### Option A: the two separate repositories (recommended)
+
+Use two terminals, one for the backend and one for the frontend.
+
+**Terminal 1: backend API** → http://localhost:4000
+
+```bash
+git clone https://github.com/saiful199324/doctor-tracker-backend.git
+cd doctor-tracker-backend
+npm install
+cp .env.example .env          # defaults work as-is for local development
+docker compose up -d          # starts MongoDB on 127.0.0.1:27017
+npm run seed                  # demo users, 60 doctors, 3,000 patients + indexes
+npm run dev                   # API at http://localhost:4000
+```
+
+**Terminal 2: frontend website** → http://localhost:3000
+
+```bash
+git clone https://github.com/saiful199324/doctor-tracker-frontend.git
+cd doctor-tracker-frontend
+npm install
+cp .env.example .env.local    # defaults already point to http://localhost:4000
+npm run dev                   # website at http://localhost:3000
+```
+
+Open **http://localhost:3000** and sign in with `admin@doctortracker.dev` / `Admin@12345`.
+
+### Option B: this combined workspace (one terminal)
+
+```bash
+git clone https://github.com/saiful199324/doctor-tracker.git
+cd doctor-tracker
+npm run setup                 # installs root, server/ and client/ dependencies
+cp server/.env.example server/.env
+cp client/.env.example client/.env.local
+npm run db:up                 # MongoDB via Docker
+npm run seed                  # demo data + indexes
+npm run dev                   # API :4000 and website :3000 together
+```
+
+### Useful commands
+
+| Command | Where | What it does |
+| --- | --- | --- |
+| `npm run dev` | either app | Development server with hot reload |
+| `npm run build && npm start` | either app | Production build and server |
+| `npm run seed` | backend | **Resets** doctors and patients to fresh demo data (and the two users) |
+| `npm run seed -- --patients=100000` | backend | Large dataset for performance testing |
+| `npm run db:indexes` | backend | Builds missing indexes and drops obsolete ones |
+| `npm run lint` / `npm run typecheck` | frontend / both | Code checks |
+| `docker compose down` | backend | Stops MongoDB (data is kept in a Docker volume) |
+
+### Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| **"Invalid environment configuration"** when starting the API | You skipped `cp .env.example .env`. The message names the missing variable. |
+| **Sign-in says "Invalid email or password"** | Run `npm run seed` in the backend to create the demo users. |
+| **Signing in sends you back to the login page** | `JWT_SECRET` must be **identical** in the backend `.env` and the frontend `.env.local`. The example files already match. |
+| **Pages load but show "The API is unreachable"** | Start the backend (`npm run dev`) and check that the frontend's `API_URL` is `http://localhost:4000`. |
+| **"MongoServerSelectionError" / ECONNREFUSED 27017** | Start Docker Desktop, then `docker compose up -d`. Or put an Atlas connection string in `MONGODB_URI`. |
+| **"Port 4000 is unavailable" or "port 3000 is in use"** | Another app uses the port. Change `PORT` in the backend `.env` (and `API_URL` in the frontend to match), or run the frontend with `npx next dev -p 3001`. |
+| **`docker compose up` says the name "doctor-tracker-mongo" is in use** | A MongoDB container from the other setup option already exists. Start it with `docker start doctor-tracker-mongo` instead. |
+| **`cp` isn't recognised** (old Windows `cmd`) | Use `copy .env.example .env`, or PowerShell or Git Bash. |
 
 ---
 
 ## Table of contents
 
-1. [Live demo](#live-demo)
+1. [Live links](#live-links) · [Try the live app](#try-the-live-app) · [Run locally](#run-locally)
 2. [Features](#features)
 3. [Tech stack](#tech-stack)
-4. [Setup guide](#setup-guide)
-5. [Demo credentials](#demo-credentials)
-6. [System architecture](#system-architecture)
-7. [Technical decisions](#technical-decisions)
-8. [Performance & optimization](#performance--optimization)
-9. [API reference](#api-reference)
-10. [Project structure](#project-structure)
-11. [Visual evidence](#visual-evidence)
-12. [Scalability considerations](#scalability-considerations)
+4. [Setup guide (detailed)](#setup-guide-detailed)
+5. [System architecture](#system-architecture)
+6. [Technical decisions](#technical-decisions)
+7. [Performance & optimization](#performance--optimization)
+8. [API reference](#api-reference)
+9. [Project structure](#project-structure)
+10. [Visual evidence](#visual-evidence)
+11. [Scalability considerations](#scalability-considerations)
 
 ---
 
@@ -71,7 +157,9 @@
 
 ---
 
-## Setup guide
+## Setup guide (detailed)
+
+The [Run locally](#run-locally) section above is the quick path. This section explains every setting.
 
 ### Prerequisites
 
@@ -81,7 +169,7 @@
 ### 1. Clone and install
 
 ```bash
-git clone <your-repo-url> doctor-tracker
+git clone https://github.com/saiful199324/doctor-tracker.git
 cd doctor-tracker
 npm run setup            # installs root, server/ and client/ dependencies
 ```
@@ -163,17 +251,6 @@ npm run live             # MongoDB up → production build → API + web + ngrok
 This needs Docker running and [ngrok](https://ngrok.com/download) installed with an authtoken (`ngrok config add-authtoken <token>`). The free plan gives each account one permanent `*.ngrok-free.dev` address, which ngrok uses automatically. On the first visit, ngrok shows a one-time notice; click **Visit Site** to continue. Stop everything with <kbd>Ctrl</kbd>+<kbd>C</kbd>.
 
 > **Windows note:** port 5000 is often reserved by Hyper-V, which is why the API defaults to 4000. If a port is taken, the server says so and exits.
-
-## Demo credentials
-
-| Role | Email | Password |
-| --- | --- | --- |
-| Admin (full access) | `admin@doctortracker.dev` | `Admin@12345` |
-| Staff (no deletes) | `staff@doctortracker.dev` | `Staff@12345` |
-
-The login page also has a **Fill demo credentials** shortcut.
-
----
 
 ## System architecture
 
