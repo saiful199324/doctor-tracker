@@ -26,7 +26,7 @@ services:
       - key: API_URL
         value: http://127.0.0.1:4000
       - key: TRUST_PROXY
-        value: "1" # Render's load balancer; Next.js passes the visitor IP through
+        value: loopback, linklocal, uniquelocal # skip Render's private-network hops
       - key: JWT_EXPIRES_IN
         value: 1d
       # Set in the dashboard (or by the deploy script); never committed:
