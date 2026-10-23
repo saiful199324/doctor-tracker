@@ -12,14 +12,18 @@
 
 | | |
 | --- | --- |
-| **App** | **https://doctor-tracker-m0ts.onrender.com** |
+| | |
+| --- | --- |
+| **Live frontend website** | **https://doctor-tracker-frontend-two.vercel.app** (Vercel) |
+| **Live backend API** | **https://doctor-tracker-api-4x90.onrender.com** (Render) · [`/api/health`](https://doctor-tracker-api-4x90.onrender.com/api/health) |
+| **Frontend repository** | https://github.com/saiful199324/doctor-tracker-frontend |
+| **Backend repository** | https://github.com/saiful199324/doctor-tracker-backend |
 | **Admin** (full access) | `admin@doctortracker.dev` / `Admin@12345` |
 | **Staff** (no deletes) | `staff@doctortracker.dev` / `Staff@12345` |
-| **Source** | https://github.com/saiful199324/doctor-tracker |
 
-> The login page has a **Fill demo credentials** button. Data is shared demo data, so feel free to add, edit and delete.
+> This repository is the combined development workspace (`client/` + `server/`). The frontend and backend are also published as the two standalone repositories above, each with its own README, setup guide and `.env.example`.
 >
-> Hosted on Render's free plan with MongoDB Atlas (see [Deployment](#deployment)). A GitHub Actions job keeps it awake from 08:00 to 23:00 Bangladesh time. Outside those hours the first visit can take up to a minute while the service wakes up.
+> The login page has a **Fill demo credentials** button. Data is shared demo data, so feel free to add, edit and delete. The API runs on Render's free plan; outside 08:00–23:00 Bangladesh time, the first request can take up to a minute while it wakes up.
 
 ---
 
@@ -132,19 +136,23 @@ Production build: `npm run build && npm start`.
 
 ### Deployment
 
-The live demo runs on **Render** (free web service, Singapore) with **MongoDB Atlas** (free M0 cluster, AWS Singapore). It's defined in [`render.yaml`](render.yaml) and redeploys automatically on every push to `main`.
+| Part | Host | Repository |
+| --- | --- | --- |
+| Frontend (Next.js) | **Vercel** (Hobby), function region `sin1` | [doctor-tracker-frontend](https://github.com/saiful199324/doctor-tracker-frontend) |
+| Backend (Express API) | **Render** (free web service, Singapore) | [doctor-tracker-backend](https://github.com/saiful199324/doctor-tracker-backend) |
+| Database | **MongoDB Atlas** (free M0, AWS Singapore) | |
 
 ```
-Browser ──HTTPS──▶ Cloudflare ──▶ Render service
-                                   ├─ Next.js client   :$PORT (public)
-                                   │      └─ /api/* ──▶ Express API :4000 (internal only) ──▶ MongoDB Atlas
+Browser ──HTTPS──▶ Vercel (Next.js)
+                     ├─ pages (middleware verifies the session JWT)
+                     └─ /api/* proxy route ──HTTPS + x-client-ip / x-proxy-secret──▶ Render: Express API ──▶ MongoDB Atlas
 ```
 
-- **One service runs both apps.** Next.js listens on Render's public port and proxies `/api/*` to the Express API on `127.0.0.1:4000`, so the API isn't reachable from the internet at all. The code is still two separate apps. Sharing one free service keeps the workspace within Render's 750 free instance hours per month.
-- **Configuration** is set as Render environment variables: `NODE_ENV=production`, `MONGODB_URI`, `JWT_SECRET` (one secret shared by both apps), `API_URL`, `TRUST_PROXY` and `CLIENT_IP_HEADER`.
-- **Real visitor IPs.** Render sits behind Cloudflare, so `CLIENT_IP_HEADER=cf-connecting-ip` gives the login rate limiter and the request logs each visitor's real address rather than a proxy node's. This was verified in the production logs.
-- **Database.** A dedicated user with `readWrite` on the `doctor_tracker` database only. The data was loaded with `npm run seed`, and indexes are managed with `npm run db:indexes`.
-- **Keep-awake.** [`.github/workflows/keep-api-warm.yml`](.github/workflows/keep-api-warm.yml) pings `/api/health` every 10 minutes during daytime hours (the URL is set in the repository variable `API_HEALTH_URL`). It doesn't run around the clock, because free hours are shared with other services in the workspace.
+- **Same-origin proxy.** The browser only calls the website's own `/api/*`. A route handler (`client/src/app/api/[...path]/route.ts`) forwards each request to the Render API, so the session cookie stays first-party on the Vercel domain. That works in every browser, with no CORS and no `SameSite=None`.
+- **Shared secrets.** `JWT_SECRET` is identical on both hosts, because the frontend middleware verifies the same token the API issues. `PROXY_SECRET` is also identical on both: the proxy uses it to forward the visitor's real IP to the API's login rate limiter, and the API ignores a forwarded IP without it. Direct API callers are identified by Cloudflare's `cf-connecting-ip` (`CLIENT_IP_HEADER`). Both paths were verified in the production logs.
+- **Auto-deploy.** Vercel deploys the frontend repository and Render deploys the backend repository on every push to `main`. This workspace publishes `client/` and `server/` to them with `git subtree push`.
+- **Database.** A dedicated user with `readWrite` on `doctor_tracker` only. The data was loaded with `npm run seed`, and indexes are managed with `npm run db:indexes`.
+- **Keep-awake.** The backend repository's GitHub Actions job pings `/api/health` every 10 minutes from 08:00 to 23:00 Bangladesh time. It doesn't run around the clock, because Render's free instance hours are shared across the workspace.
 
 ### Run a live demo from your own machine
 
@@ -181,7 +189,7 @@ flowchart LR
 
     subgraph NextJS["Next.js server :3000"]
         MW["middleware.ts<br/>route guard"]
-        RW["/api/* rewrite<br/>(reverse proxy)"]
+        RW["/api/[...path] route<br/>(same-origin proxy)"]
     end
 
     subgraph API["Express API :4000"]
@@ -209,7 +217,7 @@ flowchart LR
 
 1. **Navigation.** `client/src/middleware.ts` runs on every page request and **cryptographically verifies** the `dt_token` JWT with `jose`: HS256 signature with the shared secret, pinned algorithm, and expiry. A missing, forged, tampered or expired token redirects to `/login?next=…` and deletes the bad cookie, before any private UI renders. It fails closed: without a configured secret, everyone is treated as signed out. Signed-in users visiting `/login` are sent to the dashboard. The API runs the same verification on every request, so pages and data are protected independently.
 2. **Data fetching.** Client components call typed hooks (`useDoctors`, `usePatients`, `useOverview`, …). TanStack Query handles caching, de-duplication, request cancellation via `AbortSignal`, and `keepPreviousData` for pagination.
-3. **Proxy.** The browser only ever calls its own origin (`/api/...`). `next.config.ts` rewrites those requests to the Express server, so the auth cookie is first-party and no CORS preflights are needed.
+3. **Proxy.** The browser only ever calls its own origin (`/api/...`). The route handler `client/src/app/api/[...path]/route.ts` forwards each request to the Express API (`API_URL`), with the visitor's IP and a shared secret, and returns the response unchanged. The auth cookie therefore stays first-party, and no CORS preflights are needed.
 4. **API pipeline.** Security middleware → `authenticate` verifies the JWT → `authorize('admin')` on destructive routes → `validate()` parses `params`, `query` and `body` with Zod (coercing types and stripping unknown keys) → controller → service → MongoDB.
 5. **Errors.** Everything funnels into one error handler that returns a consistent shape: `{ success: false, message, errors?: { field: [msg] } }`. Forms map `errors` onto the matching inputs.
 6. **Writes.** Mutations invalidate the relevant query keys (doctors, patients, stats), so every open view refreshes. The server also clears its short-lived dashboard cache.
@@ -436,9 +444,10 @@ doctor-tracker/
 │       └── scripts/             # seed.ts, sync-indexes.ts (index migration)
 └── client/                      # Next.js app
     ├── .env.example
-    ├── next.config.ts           # /api proxy rewrite
+    ├── vercel.json              # Vercel function region (sin1)
     └── src/
         ├── middleware.ts        # route guard
+        ├── app/api/[...path]/   # same-origin proxy to the API
         ├── app/
         │   ├── login/
         │   ├── not-found.tsx    # branded 404
