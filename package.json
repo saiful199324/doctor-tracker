@@ -1,0 +1,20 @@
+{
+  "name": "doctor-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Doctor Tracker: Next.js client + Express/MongoDB REST API",
+  "scripts": {
+    "setup": "npm install && npm --prefix server install && npm --prefix client install",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "seed": "npm --prefix server run seed",
+    "dev": "concurrently -n api,web -c blue,magenta \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "build": "npm --prefix server run build && npm --prefix client run build",
+    "start": "concurrently -n api,web -c blue,magenta \"npm --prefix server start\" \"npm --prefix client start\"",
+    "typecheck": "npm --prefix server run typecheck && npm --prefix client run typecheck",
+    "lint": "npm --prefix client run lint"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

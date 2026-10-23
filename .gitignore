@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.next/
+out/
+
+# Environment (commit the .env.example files only)
+.env
+.env.local
+.env.*.local
+
+# Logs / tooling
+*.log
+.playwright-mcp/
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+next-env.d.ts

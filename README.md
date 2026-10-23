@@ -1,0 +1,458 @@
+# Doctor Tracker
+
+> A secure admin portal for managing doctors, their patients, and the clinical numbers that matter.
+
+## Description
+
+**Doctor Tracker** gives hospital administrators one place to run their doctor roster and patient caseload. Signed-in staff can register doctors, open any doctor to see and manage their patients, and work through thousands of patient records with instant search, date and condition filters, and pagination. A live analytics dashboard turns the data into decisions: admission trends, critical-case volume, patients per doctor, specialization load and demographics. The app is a **Next.js** client talking to a standalone **Express + MongoDB** REST API. Every list query is served by a purpose-built index, so it stays fast as the data grows.
+
+![Dashboard](docs/screenshots/dashboard-desktop.png)
+
+---
+
+## Table of contents
+
+1. [Features](#features)
+2. [Tech stack](#tech-stack)
+3. [Setup guide](#setup-guide)
+4. [Demo credentials](#demo-credentials)
+5. [System architecture](#system-architecture)
+6. [Technical decisions](#technical-decisions)
+7. [Performance & optimization](#performance--optimization)
+8. [API reference](#api-reference)
+9. [Project structure](#project-structure)
+10. [Visual evidence](#visual-evidence)
+11. [Scalability considerations](#scalability-considerations)
+
+---
+
+## Features
+
+| Area | What you can do |
+| --- | --- |
+| **Authentication** | Email/password sign-in, JWT in an `httpOnly` cookie, route guard in Next.js middleware, login rate-limiting, and role-based authorization (`admin` / `staff`). |
+| **Doctors** | Create, edit and delete doctors (name, specialization, hospital, phone, email). Search, filter by specialization / hospital / join date, sort, and paginate. Each row shows a live patient count. |
+| **Doctor detail** | Profile, caseload breakdown by condition, and the doctor's own paginated, searchable, filterable patient list. Add patients under the doctor and remove them. |
+| **Patients** | Dedicated page listing every patient. Edit or delete records. Search by name/phone/email/diagnosis. Filter by condition, doctor, gender, age group and admission date range. |
+| **Dashboard** | KPI cards with period-over-period trend, admissions timeline (7D / 30D / 90D / 12M), condition donut, patients-per-doctor ranking (click to drill in), patients and doctors by specialization, age and gender demographics, and recently added patients. |
+| **UX** | Responsive from 320 px phones to wide desktops (sidebar on desktop, drawer on mobile, tables become cards below 1280 px), dark mode with no flash on load, skeleton loaders, empty and error states, branded 404 page, toasts, accessible dialogs, and shareable URL-based filters. Passes axe-core WCAG 2 AA checks in both themes. Keyboard-friendly (skip link, visible focus), and respects "reduce motion". |
+
+**Permissions:** both roles can view, create and edit. Only `admin` can delete doctors and patients. The API enforces this, and the UI hides delete buttons for staff.
+
+## Tech stack
+
+| Layer | Choice |
+| --- | --- |
+| Client | Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS v4 |
+| Server state | TanStack Query v5 |
+| Forms & validation | React Hook Form + Zod (the same rules on client and server) |
+| Charts | Recharts 3 |
+| API | Node.js 20, Express 4, TypeScript |
+| Database | MongoDB 7 with Mongoose 9 |
+| Security | JWT (`httpOnly`, `SameSite=Lax` cookie), bcrypt, Helmet, express-rate-limit, Zod input whitelisting |
+
+---
+
+## Setup guide
+
+### Prerequisites
+
+- **Node.js 20+** and npm
+- **MongoDB 6+**: either Docker (a `docker-compose.yml` is included) or a local/Atlas instance
+
+### 1. Clone and install
+
+```bash
+git clone <your-repo-url> doctor-tracker
+cd doctor-tracker
+npm run setup            # installs root, server/ and client/ dependencies
+```
+
+### 2. Configure environment
+
+Each app ships an `.env.example`. Copy them:
+
+```bash
+cp server/.env.example server/.env
+cp client/.env.example client/.env.local
+```
+
+| File | Variable | Purpose |
+| --- | --- | --- |
+| `server/.env` | `PORT` | API port (default `4000`) |
+| | `MONGODB_URI` | Mongo connection string |
+| | `JWT_SECRET` | ≥ 32 random characters (`openssl rand -hex 32`) |
+| | `JWT_EXPIRES_IN` | Session length, e.g. `1d` |
+| | `CLIENT_ORIGIN` | Allowed browser origin(s) for CORS |
+| | `SEED_*` | Credentials created by the seed script |
+| `client/.env.local` | `API_URL` | Where Next.js proxies `/api/*` (default `http://localhost:4000`) |
+| | `JWT_SECRET` | **Same value as in `server/.env`.** The route guard uses it to verify session signatures |
+
+The example values work as-is for local development (both files ship the same placeholder secret). For any shared or deployed environment, generate one real secret and put it in **both** files. The server validates its environment on boot and exits with a clear message if anything is missing.
+
+### 3. Start MongoDB
+
+```bash
+npm run db:up            # docker compose up -d  → mongodb://127.0.0.1:27017
+```
+
+Using your own MongoDB instead? Point `MONGODB_URI` at it and skip this step.
+
+### 4. Seed demo data
+
+```bash
+npm run seed             # 2 users, 60 doctors, 3,000 patients spread over ~14 months
+# larger dataset for performance testing:
+npm --prefix server run seed -- --doctors=200 --patients=100000
+```
+
+### 5. Run
+
+```bash
+npm run dev              # API on :4000 and web on :3000 together
+```
+
+Open **http://localhost:3000** and sign in.
+
+Production build: `npm run build && npm start`.
+
+> **Windows note:** port 5000 is often reserved by Hyper-V, which is why the API defaults to 4000. If a port is taken, the server says so and exits.
+
+## Demo credentials
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin (full access) | `admin@doctortracker.dev` | `Admin@12345` |
+| Staff (no deletes) | `staff@doctortracker.dev` | `Staff@12345` |
+
+The login page also has a **Fill demo credentials** shortcut.
+
+---
+
+## System architecture
+
+```mermaid
+flowchart LR
+    subgraph Browser
+        UI["React UI<br/>(pages + components)"]
+        RQ["TanStack Query cache"]
+        URL["URL search params<br/>(filter state)"]
+        UI <--> RQ
+        UI <--> URL
+    end
+
+    subgraph NextJS["Next.js server :3000"]
+        MW["middleware.ts<br/>route guard"]
+        RW["/api/* rewrite<br/>(reverse proxy)"]
+    end
+
+    subgraph API["Express API :4000"]
+        direction TB
+        SEC["helmet · cors · compression<br/>rate limit · cookie parser"]
+        AUTH["authenticate (JWT)<br/>authorize (role)"]
+        VAL["validate (Zod)"]
+        CTRL["routes → services"]
+        CACHE["stats TTL cache"]
+        ERR["central error handler"]
+        SEC --> AUTH --> VAL --> CTRL
+        CTRL --- CACHE
+        CTRL -.-> ERR
+    end
+
+    DB[("MongoDB<br/>users · doctors · patients<br/>+ compound indexes")]
+
+    UI -- "page navigation" --> MW
+    RQ -- "fetch /api/... (same-origin, cookie)" --> RW
+    RW -- "HTTP" --> SEC
+    CTRL -- "Mongoose (lean queries,<br/>aggregations)" --> DB
+```
+
+### Request lifecycle
+
+1. **Navigation.** `client/src/middleware.ts` runs on every page request and **cryptographically verifies** the `dt_token` JWT with `jose`: HS256 signature with the shared secret, pinned algorithm, and expiry. A missing, forged, tampered or expired token redirects to `/login?next=…` and deletes the bad cookie, before any private UI renders. It fails closed: without a configured secret, everyone is treated as signed out. Signed-in users visiting `/login` are sent to the dashboard. The API runs the same verification on every request, so pages and data are protected independently.
+2. **Data fetching.** Client components call typed hooks (`useDoctors`, `usePatients`, `useOverview`, …). TanStack Query handles caching, de-duplication, request cancellation via `AbortSignal`, and `keepPreviousData` for pagination.
+3. **Proxy.** The browser only ever calls its own origin (`/api/...`). `next.config.ts` rewrites those requests to the Express server, so the auth cookie is first-party and no CORS preflights are needed.
+4. **API pipeline.** Security middleware → `authenticate` verifies the JWT → `authorize('admin')` on destructive routes → `validate()` parses `params`, `query` and `body` with Zod (coercing types and stripping unknown keys) → controller → service → MongoDB.
+5. **Errors.** Everything funnels into one error handler that returns a consistent shape: `{ success: false, message, errors?: { field: [msg] } }`. Forms map `errors` onto the matching inputs.
+6. **Writes.** Mutations invalidate the relevant query keys (doctors, patients, stats), so every open view refreshes. The server also clears its short-lived dashboard cache.
+
+### Data model
+
+```mermaid
+erDiagram
+    USER {
+        ObjectId _id
+        string name
+        string email UK
+        string password "bcrypt, select:false"
+        string role "admin | staff"
+    }
+    DOCTOR ||--o{ PATIENT : treats
+    DOCTOR {
+        ObjectId _id
+        string name
+        string specialization "enum"
+        string hospital
+        string phone
+        string email UK
+        string[] keywords "search tokens"
+        date createdAt
+    }
+    PATIENT {
+        ObjectId _id
+        string name
+        number age
+        string gender "enum"
+        string phone
+        string email
+        string bloodGroup "enum"
+        string condition "stable | critical | recovering | observation | discharged"
+        string diagnosis
+        date admissionDate
+        ObjectId doctor FK
+        string[] keywords "search tokens"
+    }
+```
+
+Patients reference doctors (rather than being embedded) because a doctor can have an unbounded number of patients, patients are queried independently on their own page, and a patient can be reassigned to another doctor.
+
+---
+
+## Technical decisions
+
+### 1. Index-backed prefix search with a `keywords` array instead of `$regex` "contains" or `$text`
+
+**Problem.** Search has to feel instant and match partial input. Typing `smi` should find *John Smith*, and `card` should find every cardiologist. MongoDB's usual options both fall short:
+
+| Option | Partial matches? | Uses an index? | Verdict |
+| --- | --- | --- | --- |
+| `{ name: /smi/i }` (contains, case-insensitive) | ✅ | ❌ full collection scan | Slows down linearly with data size |
+| `$text` index | ❌ whole words only (`smi` ≠ `smith`), stemming surprises | ✅ | Bad search-as-you-type UX |
+| Atlas Search | ✅ | ✅ | Requires Atlas and adds infrastructure; overkill here |
+| **`keywords` array + anchored regex** | ✅ word-prefix | ✅ index range scan | **Chosen** |
+
+**How it works** (`server/src/utils/search.ts`):
+
+- On every write, the service builds `keywords`: the lower-cased words of the searchable fields plus a digits-only phone number. For a doctor that's name, specialization, hospital, email and phone. For a patient it's name, email, phone and diagnosis. `"Dr. Cristina Batz", "Cardiology"` becomes `["dr", "cristina", "batz", "cardiology", …]`.
+- A multikey index `{ keywords: 1 }` covers the array.
+- The query lower-cases the input, splits it into words, and requires each word to prefix-match some keyword: `{ $and: [{ keywords: /^john/ }, { keywords: /^card/ }] }`. A **case-sensitive, left-anchored** regex is the one regex form MongoDB can answer with an index range scan (`["john", "joho")`). That's why the tokens are stored pre-lower-cased rather than queried with the `i` flag.
+- Input is regex-escaped, and the API caps it at 5 terms and 100 characters.
+
+**Result.** Search never scans the collection. The query planner picks whichever index reads less: `keywords_1` (only documents whose words start with the term), or the sort index with the keyword test applied while walking it. On 100,000 patients, a page of search results reads a few hundred documents and takes 2–4 ms. Multi-word queries narrow the results naturally (`john card`), and phone fragments like `555` work too.
+
+**Trade-offs.** The array costs a little extra storage, and writes must keep it in sync (handled in one place in each service). It matches word *prefixes*, not mid-word substrings, which suits how people search for names. If fuzzy or typo-tolerant search becomes a requirement, the next step is Atlas Search or Elasticsearch behind the same `search` query parameter.
+
+### 2. TanStack Query for server state + the URL for filter state, instead of Redux or React Context
+
+**Problem.** Almost all of this app's state is *server* state: paginated lists, counts and aggregates that live in MongoDB and change underneath you. The rest is *filter* state (search, page, sort, date ranges) that users expect to survive a refresh and work with the back button.
+
+**Why not Redux or Context?**
+
+- Redux (even with RTK) would mean hand-writing loading flags, error states, caching, cache invalidation, request de-duplication and cancellation. RTK Query solves that but brings a global store this app doesn't otherwise need.
+- A Context holding filters or data re-renders *every* consumer whenever *any* value changes. That's the opposite of the "avoid unnecessary re-renders" requirement, and it still doesn't cache anything.
+
+**What we do instead**
+
+- **TanStack Query owns server state.** Hierarchical query keys (`['doctors', 'list', params]`, `['doctors', 'detail', id, 'patients', params]`) let a mutation call `invalidateQueries(['doctors'])` and refresh every affected view, including dashboard stats. `placeholderData: keepPreviousData` keeps the current page on screen while the next loads, so there's no layout jump. Each request gets an `AbortSignal`, so fast typing cancels stale requests. Retries are disabled for 4xx errors.
+- **The URL owns filter state** (`useUrlFilters` hook). `?search=card&specialization=Cardiology&page=2` is the single source of truth. Views are shareable and bookmarkable, back/forward work, and a refresh restores the exact view with no extra state library. Defaults are omitted from the URL, and changing any filter resets `page`.
+- **Local `useState`** is enough for what's left (open dialogs, the row being edited).
+
+**Re-render discipline that falls out of this:** the search box keeps keystrokes in local state and pushes a debounced value (350 ms) to the URL. List rows, the table, pagination and every chart are `memo`ized and receive stable props (memoized params, `useCallback` handlers). Recharts only loads on the dashboard route, so other routes don't pay for it (dashboard first load ≈ 266 kB vs ≈ 180 kB elsewhere).
+
+### Other decisions in brief
+
+- **Same-origin proxy and `httpOnly` cookie, not `localStorage` tokens.** JavaScript can never read the token, which removes the XSS token-theft vector. `SameSite=Lax` plus a JSON-only API mitigates CSRF. The browser never makes a cross-origin call.
+- **Patient counts via aggregation, not a denormalized counter.** The doctor list counts patients for *only the 10–50 doctors on the page* with a single `$match: { doctor: { $in: ids } } → $group` query, served by the `{ doctor: 1, … }` compound indexes. That's always correct, with no counter drift and no transactions needed.
+- **Blocking doctor deletion while patients exist** (HTTP 409) instead of a silent cascade. Deleting medical records should be a deliberate act.
+- **Zod at both edges.** The same rules run in the browser (instant feedback) and the API (the actual security boundary). Server-side Zod also strips unknown keys, which blocks NoSQL operator injection such as `?search[$gt]=`.
+
+---
+
+## Performance & optimization
+
+### Indexes
+
+Indexes follow the **ESR rule** (Equality → Sort → Range). Every sort ends in a unique `_id` tiebreaker, so pages never overlap when values collide. Every index that serves a sort ends with that same key, so MongoDB reads the page straight off the index and stops after `limit` rows instead of sorting every match in memory.
+
+| Collection | Index | Serves |
+| --- | --- | --- |
+| doctors | `{ email: 1 }` unique | uniqueness, lookups |
+| doctors | `{ createdAt: -1, _id: -1 }` | default sort + "joined" date range |
+| doctors | `{ specialization: 1, createdAt: -1, _id: -1 }` | specialization filter + sort |
+| doctors | `{ hospital: 1, createdAt: -1, _id: -1 }` | hospital filter + sort, `distinct('hospital')` |
+| doctors | `{ name: 1, _id: 1 }` | A–Z / Z–A sort, filter dropdown |
+| doctors | `{ keywords: 1 }` | search |
+| patients | `{ createdAt: -1, _id: -1 }` | default sort: most recently added first |
+| patients | `{ doctor: 1, createdAt: -1, _id: -1 }` | a doctor's patient list |
+| patients | `{ condition: 1, createdAt: -1, _id: -1 }` | condition filter + default sort |
+| patients | `{ admissionDate: -1, _id: -1 }` | "Recently admitted" sort, admission date range, admissions timeline |
+| patients | `{ doctor: 1, admissionDate: -1, _id: -1 }` | patients-per-doctor aggregations, admission sort per doctor |
+| patients | `{ condition: 1, admissionDate: -1, _id: -1 }` | condition filter + admission sort, condition breakdown |
+| patients | `{ gender: 1, admissionDate: -1 }` | gender filter |
+| patients | `{ name: 1, _id: 1 }` | A–Z sort |
+| patients | `{ age: 1, _id: 1 }` | age sort (both directions), age-group filter |
+| patients | `{ keywords: 1 }` | search |
+| users | `{ email: 1 }` unique | login |
+
+**Verified with the MongoDB profiler on 100,000 patients.** All 30 list-query combinations of search, filters, sorts and pages are served by an index, and list counts trigger zero collection scans. Before tuning, some combinations read far more records than needed:
+
+| Query | Records read before → after |
+| --- | --- |
+| Sort patients by name | 100,000 (in-memory sort) → **10** |
+| A doctor's patient list | 342 (in-memory sort) → **10** |
+| Condition filter | 122 → **10** |
+| Search + condition | 1,212 (in-memory sort) → 607 |
+| Unfiltered list total | full collection scan → **O(1) metadata** |
+
+One known trade-off: an admission-date range combined with the default "recently added" sort filters on one field and sorts on another, so it sorts its matches in memory. That is about 8,000 rows and 25 ms for a two-week range at 100k patients. Picking "Recently admitted" makes it fully index-served.
+
+### Query patterns
+
+- **`lean()`** on every read: plain objects, no Mongoose document hydration.
+- **Page and count in parallel** (`Promise.all([find().skip().limit(), count])`). With no filter the count uses `estimatedDocumentCount()` (O(1)). With a filter it uses an index-backed `countDocuments`.
+- **Selective `populate`.** One batched `$in` lookup per page, fetching only `name specialization hospital`.
+- **Dashboard.** Fourteen independent queries run concurrently. Totals use `estimatedDocumentCount()` (metadata, O(1)). Aggregations `$group` on indexed fields *before* any `$lookup`, so joins touch at most a handful of grouped rows. Time series use `$dateTrunc` in the **viewer's timezone**, and the server fills empty buckets so charts have no gaps. Results are cached for 30 s per range and timezone, and the cache is invalidated on every write.
+- `autoIndex` is disabled in production. `npm --prefix server run db:indexes` is the migration step: it builds missing indexes and drops ones no longer declared. The seed script runs it too.
+
+### Frontend
+
+- Debounced search, cancelled in-flight requests, `keepPreviousData` paging, and `memo`/`useCallback`/`useMemo` on hot paths. Re-renders were measured with a React commit hook:
+
+  | Action | What re-renders |
+  | --- | --- |
+  | Typing 5 characters in search | only the search box; table **0×** until the debounce fires, then once |
+  | Opening and closing the edit dialog | table and rows **0×** |
+  | Typing in a form | form once (dirty flag), not per keystroke (uncontrolled inputs) |
+  | Dashboard range switch | each chart and each KPI card **once** |
+- Route-level code splitting, plus `optimizePackageImports` for `lucide-react`, `recharts` and `date-fns`.
+- Skeletons sized like the real content, so there's no layout shift.
+- The theme is applied by an inline script before first paint, so there's no light/dark flash.
+
+---
+
+## API reference
+
+All routes are prefixed with `/api`. Everything except `/auth/login`, `/auth/logout` and `/health` requires authentication.
+
+| Method | Route | Role | Description |
+| --- | --- | --- | --- |
+| `POST` | `/auth/login` | public | Sign in. Sets the `dt_token` cookie. Rate-limited (10 failed attempts per 15 min). |
+| `POST` | `/auth/logout` | public | Clears the cookie |
+| `GET` | `/auth/me` | any | Current user |
+| `GET` | `/doctors` | any | List. Query: `page, limit, search, specialization, hospital, from, to, sort` |
+| `GET` | `/doctors/options` | any | Lightweight doctor / hospital / specialization lists for dropdowns |
+| `POST` | `/doctors` | any | Create a doctor |
+| `GET` | `/doctors/:id` | any | Doctor + patient count + condition breakdown |
+| `PATCH` | `/doctors/:id` | any | Update a doctor |
+| `DELETE` | `/doctors/:id` | admin | Delete (409 if the doctor still has patients) |
+| `GET` | `/doctors/:id/patients` | any | The doctor's patients (same query parameters as `/patients`) |
+| `POST` | `/doctors/:id/patients` | any | Add a patient under the doctor |
+| `DELETE` | `/doctors/:id/patients/:patientId` | admin | Remove a patient from the doctor's list |
+| `GET` | `/patients` | any | List. Query: `page, limit, search, condition, gender, doctor, ageMin, ageMax, from, to, sort` |
+| `POST` | `/patients` | any | Create a patient (body includes `doctor`) |
+| `GET` | `/patients/:id` | any | Single patient |
+| `PATCH` | `/patients/:id` | any | Partial update. Empty optional fields are removed. |
+| `DELETE` | `/patients/:id` | admin | Delete |
+| `GET` | `/stats/overview` | any | Dashboard aggregates. Query: `range=7d\|30d\|90d\|12m`, `tz=<IANA zone>` |
+| `GET` | `/health` | public | Liveness + DB status |
+
+**List response**
+
+```json
+{
+  "success": true,
+  "data": [ { "_id": "…", "name": "Dr. Jenna Howe", "patientCount": 13, "…": "…" } ],
+  "meta": { "page": 1, "limit": 10, "total": 60, "totalPages": 6, "hasNextPage": true, "hasPrevPage": false }
+}
+```
+
+**Error response** (400 / 401 / 403 / 404 / 409 / 413 / 500; stack traces are never sent in production)
+
+```json
+{ "success": false, "message": "Validation failed", "errors": { "email": ["Enter a valid email"] } }
+```
+
+---
+
+## Project structure
+
+```
+doctor-tracker/
+├── docker-compose.yml           # MongoDB 7
+├── package.json                 # convenience scripts for both apps
+├── docs/screenshots/
+├── server/                      # Express REST API
+│   ├── .env.example
+│   └── src/
+│       ├── index.ts             # bootstrap + graceful shutdown
+│       ├── app.ts               # middleware pipeline + route mounting
+│       ├── config/              # env (Zod-validated), db
+│       ├── middleware/          # auth, validate, error
+│       ├── models/              # User, Doctor, Patient (+ indexes)
+│       ├── modules/             # feature modules: routes → schema → service
+│       │   ├── auth/
+│       │   ├── doctors/
+│       │   ├── patients/
+│       │   └── stats/
+│       ├── utils/               # ApiError, asyncHandler, search, pagination, cache, schemas
+│       └── scripts/             # seed.ts, sync-indexes.ts (index migration)
+└── client/                      # Next.js app
+    ├── .env.example
+    ├── next.config.ts           # /api proxy rewrite
+    └── src/
+        ├── middleware.ts        # route guard
+        ├── app/
+        │   ├── login/
+        │   ├── not-found.tsx    # branded 404
+        │   └── (app)/           # authenticated layout (AppShell) + error.tsx boundary
+        │       ├── dashboard/
+        │       ├── doctors/[id]/
+        │       └── patients/
+        ├── components/
+        │   ├── ui/              # Button, Field/Input/Select, Modal, ConfirmDialog, Pagination, Card…
+        │   ├── layout/          # AppShell, PageHeader, ThemeToggle
+        │   ├── shared/          # SearchInput, FilterPanel, ConditionBadge
+        │   ├── dashboard/       # StatCard, charts
+        │   ├── doctors/         # DoctorFormModal
+        │   └── patients/        # PatientFormModal, PatientTable
+        ├── hooks/               # use-auth, use-doctors, use-patients, use-stats, use-url-filters, use-debounce, use-reduced-motion
+        └── lib/                 # api client, types, query keys, utils
+```
+
+---
+
+## Visual evidence
+
+### Desktop
+
+| Dashboard (light) | Dashboard (dark) |
+| --- | --- |
+| ![Dashboard](docs/screenshots/dashboard-desktop.png) | ![Dashboard dark](docs/screenshots/dashboard-dark.png) |
+
+| Doctors (search + filters) | Doctor detail & patients |
+| --- | --- |
+| ![Doctors](docs/screenshots/doctors-desktop.png) | ![Doctor detail](docs/screenshots/doctor-detail-desktop.png) |
+
+| Patients | Add patient |
+| --- | --- |
+| ![Patients](docs/screenshots/patients-desktop.png) | ![Add patient](docs/screenshots/add-patient-modal.png) |
+
+![Login](docs/screenshots/login-desktop.png)
+
+### Mobile
+
+| Login | Dashboard | Doctors | Patients | Navigation |
+| --- | --- | --- | --- | --- |
+| ![](docs/screenshots/login-mobile.png) | ![](docs/screenshots/dashboard-mobile.png) | ![](docs/screenshots/doctors-mobile.png) | ![](docs/screenshots/patients-mobile.png) | ![](docs/screenshots/menu-mobile.png) |
+
+---
+
+## Scalability considerations
+
+- **Stateless API.** JWT sessions mean any number of API instances can sit behind a load balancer. The only in-process state is the dashboard cache (`utils/cache.ts`), whose small interface can be backed by Redis without touching callers.
+- **Deep pagination.** Offset pagination (`skip`) is the right fit for page-number UX at this scale. For very large collections, the `(admissionDate, _id)` / `(createdAt, _id)` indexes already support switching to cursor (keyset) pagination.
+- **Exact counts.** `countDocuments` on a filtered query is index-backed but still O(matches). At millions of rows, cap counts (for example, "10,000+") or cache them per filter.
+- **Analytics at scale.** Aggregations currently run live with a 30 s cache. At high volume, move them to pre-aggregated daily rollups (a scheduled `$merge` into a `daily_stats` collection) or point them at a secondary with `readPreference: secondaryPreferred`.
+- **Search.** The keyword index scales well for prefix search. Typo tolerance or relevance ranking would move to Atlas Search behind the same `search` parameter.
+- **Operations.** Graceful shutdown (SIGTERM drains connections), a `/api/health` endpoint for probes, Zod-validated configuration, structured error responses, and `morgan` request logging.
+- **Dependencies.** `npm audit --omit=dev` reports **0 vulnerabilities** in all three packages. Next 15's bundled PostCSS is pinned to the patched 8.5.x through an npm `overrides` entry. The one remaining dev-only advisory (`braces`, inside eslint's glob matcher) has no patched release, and it never ships to users or runs in production.
