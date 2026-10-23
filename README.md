@@ -8,21 +8,35 @@
 
 ![Dashboard](docs/screenshots/dashboard-desktop.png)
 
+## Live demo
+
+| | |
+| --- | --- |
+| **App** | **https://sandfly-machine-neil.ngrok-free.dev** |
+| **Admin** (full access) | `admin@doctortracker.dev` / `Admin@12345` |
+| **Staff** (no deletes) | `staff@doctortracker.dev` / `Staff@12345` |
+| **Source** | https://github.com/saiful199324/doctor-tracker |
+
+> On the first visit, ngrok's free plan shows a one-time "You are about to visit…" notice. Click **Visit Site** to continue. The login page also has a **Fill demo credentials** button.
+>
+> The demo runs the production build through an [ngrok](https://ngrok.com) HTTPS tunnel, started with `npm run live` (see [Run the live demo](#run-the-live-demo)). Data is shared demo data: feel free to add, edit and delete. `npm run seed` restores it.
+
 ---
 
 ## Table of contents
 
-1. [Features](#features)
-2. [Tech stack](#tech-stack)
-3. [Setup guide](#setup-guide)
-4. [Demo credentials](#demo-credentials)
-5. [System architecture](#system-architecture)
-6. [Technical decisions](#technical-decisions)
-7. [Performance & optimization](#performance--optimization)
-8. [API reference](#api-reference)
-9. [Project structure](#project-structure)
-10. [Visual evidence](#visual-evidence)
-11. [Scalability considerations](#scalability-considerations)
+1. [Live demo](#live-demo)
+2. [Features](#features)
+3. [Tech stack](#tech-stack)
+4. [Setup guide](#setup-guide)
+5. [Demo credentials](#demo-credentials)
+6. [System architecture](#system-architecture)
+7. [Technical decisions](#technical-decisions)
+8. [Performance & optimization](#performance--optimization)
+9. [API reference](#api-reference)
+10. [Project structure](#project-structure)
+11. [Visual evidence](#visual-evidence)
+12. [Scalability considerations](#scalability-considerations)
 
 ---
 
@@ -115,6 +129,16 @@ npm run dev              # API on :4000 and web on :3000 together
 Open **http://localhost:3000** and sign in.
 
 Production build: `npm run build && npm start`.
+
+### Run the live demo
+
+```bash
+npm run live             # MongoDB up → production build → API + web + ngrok tunnel
+```
+
+This needs Docker running and [ngrok](https://ngrok.com/download) installed with an authtoken (`ngrok config add-authtoken <token>`). The free plan gives each account one permanent `*.ngrok-free.dev` address, which ngrok uses automatically. The API runs with `NODE_ENV=production`, so session cookies are `Secure` and errors never include stack traces. Visitors' real IPs reach the login rate limiter through the proxy chain. Stop everything with <kbd>Ctrl</kbd>+<kbd>C</kbd>.
+
+For an always-on deployment without this machine: MongoDB Atlas for the database, Render or Railway for `server/` (`npm run build && npm start`), and Vercel for `client/`. Set `API_URL` to the API's URL, and use the same `JWT_SECRET` in both.
 
 > **Windows note:** port 5000 is often reserved by Hyper-V, which is why the API defaults to 4000. If a port is taken, the server says so and exits.
 

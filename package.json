@@ -12,9 +12,12 @@
     "build": "npm --prefix server run build && npm --prefix client run build",
     "start": "concurrently -n api,web -c blue,magenta \"npm --prefix server start\" \"npm --prefix client start\"",
     "typecheck": "npm --prefix server run typecheck && npm --prefix client run typecheck",
-    "lint": "npm --prefix client run lint"
+    "lint": "npm --prefix client run lint",
+    "live": "npm run db:up && npm run build && npm run live:start",
+    "live:start": "concurrently -k -n api,web,tunnel -c blue,magenta,green \"cross-env NODE_ENV=production npm --prefix server start\" \"npm --prefix client start\" \"ngrok http 3000 --log=stdout --log-level=warn\""
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "cross-env": "^7.0.3"
   }
 }
