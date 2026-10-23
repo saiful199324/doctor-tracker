@@ -27,6 +27,8 @@ services:
         value: http://127.0.0.1:4000
       - key: TRUST_PROXY
         value: loopback, linklocal, uniquelocal # skip Render's private-network hops
+      - key: CLIENT_IP_HEADER
+        value: cf-connecting-ip # Render is fronted by Cloudflare, which always sets this
       - key: JWT_EXPIRES_IN
         value: 1d
       # Set in the dashboard (or by the deploy script); never committed:
