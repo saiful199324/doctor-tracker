@@ -15,3 +15,6 @@ out/
 Thumbs.db
 *.tsbuildinfo
 next-env.d.ts
+
+# Deployment credentials (local only)
+.deploy.env
